@@ -59,6 +59,7 @@ export type MessageResponse = {
     balloonBundleId: string | null;
     associatedMessageGuid: string | null;
     associatedMessageType: string | null;
+    associatedMessageEmoji?: string | null;
     expressiveSendStyleId: string | null;
     timeExpressiveSendPlayed?: number | null;
     replyToGuid?: string | null;
