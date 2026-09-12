@@ -76,7 +76,8 @@ export class PrivateApiMessage extends PrivateApiAction {
         chatGuid: string,
         selectedMessageGuid: string,
         reactionType: ValidTapback | ValidRemoveTapback,
-        partIndex?: number
+        partIndex?: number,
+        reactionEmoji?: string
     ): Promise<TransactionResult> {
         const action = "send-reaction";
         this.throwForNoMissingFields(action, [chatGuid, selectedMessageGuid, reactionType]);
@@ -88,7 +89,8 @@ export class PrivateApiMessage extends PrivateApiAction {
                 chatGuid,
                 selectedMessageGuid,
                 reactionType,
-                partIndex: partIndex ?? 0
+                partIndex: partIndex ?? 0,
+                reactionEmoji
             },
             request
         );

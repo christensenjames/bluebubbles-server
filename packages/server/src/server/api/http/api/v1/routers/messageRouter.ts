@@ -486,7 +486,7 @@ export class MessageRouter {
     }
 
     static async react(ctx: RouterContext, _: Next) {
-        const { chatGuid, selectedMessageGuid, reaction, partIndex } = ctx?.request?.body ?? {};
+        const { chatGuid, selectedMessageGuid, reaction, partIndex, reactionEmoji } = ctx?.request?.body ?? {};
 
         // Fetch the message we are reacting to
         const message = await Server().iMessageRepo.getMessage(selectedMessageGuid, false, true);
@@ -494,7 +494,7 @@ export class MessageRouter {
 
         // Send the reaction
         try {
-            const sentMessage = await MessageInterface.sendReaction({ chatGuid, message, reaction, partIndex });
+            const sentMessage = await MessageInterface.sendReaction({ chatGuid, message, reaction, partIndex, reactionEmoji });
             return new Success(ctx, {
                 message: "Reaction sent!",
                 // No need to load the participants since we sent the message

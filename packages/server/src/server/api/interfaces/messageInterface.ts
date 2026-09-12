@@ -31,12 +31,14 @@ export class MessageInterface {
         "laugh",
         "emphasize",
         "question",
+        "emoji",
         "-love",
         "-like",
         "-dislike",
         "-laugh",
         "-emphasize",
-        "-question"
+        "-question",
+        "-emoji"
     ];
 
     /**
@@ -390,15 +392,22 @@ export class MessageInterface {
         message,
         reaction,
         tempGuid = null,
-        partIndex = 0
+        partIndex = 0,
+        reactionEmoji
     }: SendReactionParams): Promise<Message> {
         checkPrivateApiStatus();
 
         // Rebuild the selected message text to make it what the reaction text
         // would be in the database
-        const prefix = (reaction as string).startsWith("-")
-            ? negativeReactionTextMap[reaction as string]
-            : reactionTextMap[reaction as string];
+        const isRemoval = (reaction as string).startsWith("-");
+        const prefix =
+            reaction === "emoji" || reaction === "-emoji"
+                ? isRemoval
+                    ? `Removed a ${reactionEmoji} reaction from`
+                    : `Reacted ${reactionEmoji} to`
+                : isRemoval
+                  ? negativeReactionTextMap[reaction as string]
+                  : reactionTextMap[reaction as string];
 
         // If the message text is just the invisible char, we know it's probably just an attachment
         const text = message.universalText(false) ?? "";
@@ -454,7 +463,13 @@ export class MessageInterface {
         Server().messageManager.add(awaiter);
 
         // Send the reaction
-        const result = await Server().privateApi.message.react(chatGuid, message.guid, reaction, partIndex ?? 0);
+        const result = await Server().privateApi.message.react(
+            chatGuid,
+            message.guid,
+            reaction,
+            partIndex ?? 0,
+            reactionEmoji
+        );
         if (!result?.identifier) {
             throw new Error("Failed to send reaction! No message GUID returned.");
         } else {
