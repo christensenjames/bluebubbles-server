@@ -29,9 +29,14 @@ export class AttachmentRouter {
 
     static async download(ctx: RouterContext, _: Next) {
         const { guid } = ctx.params;
-        const { height, width, quality, original, force } = ctx.request.query;
+        const { height, width, quality, original, force, maxSize } = ctx.request.query;
         const useOriginal = isTruthyBool(original as string);
         const forceDownload = isTruthyBool((force as string) ?? "true");
+
+        const parsedMaxSize = maxSize === undefined ? null : Number(maxSize);
+        if (parsedMaxSize !== null && (!Number.isInteger(parsedMaxSize) || parsedMaxSize < 1)) {
+            throw new BadRequest({ error: "Invalid maxSize specified! Must be a positive integer" });
+        }
 
         // Fetch the info for the attachment by GUID
         const attachment = await Server().iMessageRepo.getAttachment(guid);
@@ -70,8 +75,26 @@ export class AttachmentRouter {
                 }
             }
 
-            // Handle resizing the image
-            if (mimeType.startsWith("image/") && mimeType !== "image/gif" && (quality || width || height)) {
+            // Handle resizing the image to a low-res JPEG (takes precedence over the width/height/quality resize)
+            let resizeToMaxSize = !!parsedMaxSize && mimeType.startsWith("image/") && mimeType !== "image/gif";
+            if (resizeToMaxSize) {
+                // sips -Z can upscale, so leave images that already fit untouched
+                const source = nativeImage.createFromPath(aPath);
+                const { width: sourceWidth, height: sourceHeight } = source.getSize();
+                resizeToMaxSize = source.isEmpty() || Math.max(sourceWidth, sourceHeight) > parsedMaxSize;
+            }
+
+            if (resizeToMaxSize) {
+                const newName = `${attachment.transferName}.maxSize${parsedMaxSize}.jpg`;
+                const resizedPath = FileSystem.cachedAttachmentPath(attachment, newName);
+                if (!FileSystem.cachedAttachmentExists(attachment, newName)) {
+                    await FileSystem.resizeToJpg(aPath, resizedPath, parsedMaxSize);
+                }
+                aPath = resizedPath;
+
+                mimeType = "image/jpeg";
+                ctx.response.set("X-BB-Resized", String(parsedMaxSize));
+            } else if (mimeType.startsWith("image/") && mimeType !== "image/gif" && (quality || width || height)) {
                 const opts: Partial<Electron.ResizeOptions> = {};
 
                 // Parse opts

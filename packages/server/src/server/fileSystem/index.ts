@@ -555,6 +555,16 @@ export class FileSystem {
         }
     }
 
+    static async resizeToJpg(inputPath: string, outputPath: string, maxSize: number): Promise<void> {
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        const output = await FileSystem.execShellCommand(
+            `/usr/bin/sips -Z ${maxSize} -s format jpeg -s formatOptions 70 "${inputPath}" --out "${outputPath}"`
+        );
+        if (isNotEmpty(output) && output.includes("Error:")) {
+            throw Error(`Failed to resize image to JPEG: ${output}`);
+        }
+    }
+
     static async isSipDisabled(): Promise<boolean> {
         const res = ((await FileSystem.execShellCommand(`csrutil status`)) ?? "").trim();
         return !res.endsWith("enabled.");
