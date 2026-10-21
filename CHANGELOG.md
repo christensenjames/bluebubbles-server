@@ -12,6 +12,16 @@
 - The handler now compares both the raw password and, when it decodes, the `decodeURI` result
   (`server/api/http/index.ts`). A raw password that only looked like an escape (`%41`) also
   authenticates now; before, it was decoded to `A` and rejected.
+- A rejected client now stops at the disconnect instead of also getting the route handlers. The
+  handler rejects every client when the server has no password set, as the REST auth middleware
+  already did; before, an empty client password matched an empty server password and an unset
+  password matched the string `null`. Any other error while setting a client up is logged and
+  disconnects it rather than leaving it connected with no routes. The password is read without an
+  `await`, since `getConfig` is synchronous.
+- Deployed to the Mac mini the same way as the 2026-10-18 build; the previous files are in
+  `~/bb-build/backup-socketauth-20261021/`. Checked there: the server log shows `Client
+  Authenticated Successfully` for the app, the app's heartbeat stopped missing, and a client sending
+  `abc%zz` is disconnected.
 
 ## 2026-10-18 — Low-quality JPEG attachment downloads
 

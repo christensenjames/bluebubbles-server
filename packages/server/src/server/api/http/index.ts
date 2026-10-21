@@ -185,50 +185,56 @@ export class HttpService extends Loggable {
         /**
          * Handle all other data requests
          */
-        this.socketServer.on("connection", async socket => {
+        this.socketServer.on("connection", socket => {
             socket.on("disconnect", (_: any) => {
                 this.log.info(`Client disconnected (Total Clients: ${this.socketServer.sockets.sockets.size})`);
             });
 
-            const pass = String(socket.handshake.query?.password ?? socket.handshake.query?.guid ?? "");
-            const cfgPass = String((await Server().repo.getConfig("password")) as string);
-
-            // socket.io already decoded the query; decodeURI throws on a literal '%', which skipped auth and routes.
-            let decodedPass = pass;
+            // A throw here once left an unauthenticated socket connected with no routes; fail closed instead.
             try {
-                decodedPass = decodeURI(pass);
-            } catch {
-                // Not an escape sequence; the raw value is compared below.
-            }
+                const pass = String(socket.handshake.query?.password ?? socket.handshake.query?.guid ?? "");
+                const cfgPass = safeTrim(String(Server().repo.getConfig("password") ?? ""));
 
-            // Basic authentication
-            if (safeTrim(pass) === safeTrim(cfgPass) || safeTrim(decodedPass) === safeTrim(cfgPass)) {
+                // socket.io already decodes the query; decodeURI stays for double-encoding clients and throws on '%'.
+                let decodedPass = pass;
+                try {
+                    decodedPass = decodeURI(pass);
+                } catch {
+                    // Not an escape sequence; the raw value is compared below.
+                }
+
+                // Basic authentication
+                if (cfgPass === "" || (safeTrim(pass) !== cfgPass && safeTrim(decodedPass) !== cfgPass)) {
+                    socket.disconnect();
+                    this.log.info(`Closing client connection. Authentication failed.`);
+                    return;
+                }
                 this.log.info(
                     `Client Authenticated Successfully (Total Clients: ${this.socketServer.sockets.sockets.size})`
                 );
-            } else {
+
+                /**
+                 * Error handling middleware for all Socket.IO requests.
+                 * If there are any errors in a socket event, they will be handled here.
+                 *
+                 * A console message will be printed, and a socket error will be emitted
+                 */
+                socket.use(async (_: any, next: (error?: Error) => void) => {
+                    try {
+                        await next();
+                    } catch (ex: any) {
+                        this.log.error(`Socket server error! ${ex.message}`);
+                        socket.emit("exception", createServerErrorResponse(ex?.message ?? ex));
+                        next(ex);
+                    }
+                });
+
+                // Pass to method to handle the socket events
+                SocketRoutesV1.createRoutes(socket);
+            } catch (ex: unknown) {
+                this.log.error(`Failed to set up socket client! ${ex instanceof Error ? ex.message : String(ex)}`);
                 socket.disconnect();
-                this.log.info(`Closing client connection. Authentication failed.`);
             }
-
-            /**
-             * Error handling middleware for all Socket.IO requests.
-             * If there are any errors in a socket event, they will be handled here.
-             *
-             * A console message will be printed, and a socket error will be emitted
-             */
-            socket.use(async (_: any, next: (error?: Error) => void) => {
-                try {
-                    await next();
-                } catch (ex: any) {
-                    this.log.error(`Socket server error! ${ex.message}`);
-                    socket.emit("exception", createServerErrorResponse(ex?.message ?? ex));
-                    next(ex);
-                }
-            });
-
-            // Pass to method to handle the socket events
-            SocketRoutesV1.createRoutes(socket);
         });
 
         // Start the server
