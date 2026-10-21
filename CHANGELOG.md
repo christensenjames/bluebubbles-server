@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-21 — Socket auth with a '%' in the password
+
+- The socket connection handler ran `decodeURI` on the client's password before checking it. A
+  password containing a literal `%` that is not an escape (such as `%zz`) made it throw `URIError`,
+  so the handler stopped before the auth check, before `socket.disconnect()` and before
+  `SocketRoutesV1.createRoutes`. The client stayed connected and got every broadcast event, but no
+  request was ever answered: the app's 30 s `get-fcm-client` heartbeat got no ack and rebuilt the
+  socket every 40 s, with an incremental sync and a full contact upload each time. The same hole let a
+  client with a wrong password that contained a malformed `%` stay connected and receive events.
+- The handler now compares both the raw password and, when it decodes, the `decodeURI` result
+  (`server/api/http/index.ts`). A raw password that only looked like an escape (`%41`) also
+  authenticates now; before, it was decoded to `A` and rejected.
+
 ## 2026-10-18 — Low-quality JPEG attachment downloads
 
 - `GET /api/v1/attachment/:guid/download?maxSize=N` returns a JPEG whose longest side is at most N,

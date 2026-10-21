@@ -190,14 +190,19 @@ export class HttpService extends Loggable {
                 this.log.info(`Client disconnected (Total Clients: ${this.socketServer.sockets.sockets.size})`);
             });
 
-            let pass = socket.handshake.query?.password ?? socket.handshake.query?.guid;
+            const pass = String(socket.handshake.query?.password ?? socket.handshake.query?.guid ?? "");
             const cfgPass = String((await Server().repo.getConfig("password")) as string);
 
-            // Decode the param incase it contains URL encoded characters
-            pass = decodeURI(pass as string);
+            // socket.io already decoded the query; decodeURI throws on a literal '%', which skipped auth and routes.
+            let decodedPass = pass;
+            try {
+                decodedPass = decodeURI(pass);
+            } catch {
+                // Not an escape sequence; the raw value is compared below.
+            }
 
             // Basic authentication
-            if (safeTrim(pass) === safeTrim(cfgPass)) {
+            if (safeTrim(pass) === safeTrim(cfgPass) || safeTrim(decodedPass) === safeTrim(cfgPass)) {
                 this.log.info(
                     `Client Authenticated Successfully (Total Clients: ${this.socketServer.sockets.sockets.size})`
                 );
