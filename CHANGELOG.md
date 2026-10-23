@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-23 — Set the iMessage contact card photo
+
+- New `POST /api/v1/icloud/contact/avatar` (multipart field `avatar`, Private API, macOS 14+)
+  sets the photo on the user's iMessage contact card. The upload is copied into
+  `~/Library/Messages/Attachments/BlueBubbles/` first, because sandboxed Messages cannot read
+  the request's temp file, and the copy is deleted afterwards (`iCloudInterface.ts`, branch
+  `feat/set-contact-card-avatar`).
+- Needs the helper's new `set-personal-avatar` event (bluebubbles-helper branch
+  `feat/set-personal-avatar`, on top of `feat/emoji-tapback-send`). It copies the personal
+  nickname, swaps in the avatar and calls `IMNicknameController setPersonalNickname:`, which
+  hands it to imagent; imagent stores the photo in `~/Library/Messages/NickNameCache/`.
+  `updatePersonalNickname:` only changes Messages' in-memory copy, which is lost on restart.
+- Deployed to the Mac mini with the same-CDHash swap, plus the helper dylib in
+  `Contents/Resources/appResources/private-api/macos11/`. The pre-change files and the
+  original card photo (`card.jpg`, a 1000×1000 PNG) are in
+  `~/bb-build/backup-cardavatar-20261023/`.
+- Tested by setting the card to the same photo re-encoded as JPEG: the card now reports the
+  new 250,475-byte file, saved as `NickNameCache/BUoJ1aGHL6mPzQINXRc03w==-ad`.
+
 ## 2026-10-23 — Mac contact photos stored only as thumbnails
 
 - `/api/v1/contact` dropped the photo of most iCloud contacts. node-mac-contacts returns
