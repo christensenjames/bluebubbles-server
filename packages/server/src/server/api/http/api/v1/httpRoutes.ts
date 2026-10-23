@@ -112,6 +112,12 @@ export class HttpRoutes {
                         controller: iCloudRouter.getContactCard
                     },
                     {
+                        method: HttpMethod.POST,
+                        path: "contact/avatar",
+                        middleware: [...HttpRoutes.protected, PrivateApiMiddleware],
+                        controller: iCloudRouter.setContactCardAvatar
+                    },
+                    {
                         method: HttpMethod.GET,
                         path: "findmy/devices",
                         controller: FindMyRouter.devices

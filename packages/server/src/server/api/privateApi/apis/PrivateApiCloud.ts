@@ -20,6 +20,12 @@ export class PrivateApiCloud extends PrivateApiAction {
         return this.sendApiMessage(action, { address }, request);
     }
 
+    async setContactCardAvatar(path: string): Promise<TransactionResult> {
+        const action = "set-personal-avatar";
+        const request = new TransactionPromise(TransactionType.OTHER);
+        return this.sendApiMessage(action, { path }, request);
+    }
+
     async modifyActiveAlias(alias: string): Promise<TransactionResult> {
         const action = "modify-active-alias";
         const request = new TransactionPromise(TransactionType.OTHER);

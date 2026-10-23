@@ -1,6 +1,6 @@
 import { Server } from "@server";
 import fs from "fs";
-import { isMinBigSur, isMinHighSierra } from "@server/env";
+import { isMinBigSur, isMinHighSierra, isMinSonoma } from "@server/env";
 import { checkPrivateApiStatus, isNotEmpty } from "@server/helpers/utils";
 import { bytesToBase64 } from "byte-base64";
 
@@ -29,6 +29,15 @@ export class iCloudInterface {
         }
 
         return data.data;
+    }
+
+    static async setContactCardAvatar(path: string) {
+        checkPrivateApiStatus();
+        if (!isMinSonoma) {
+            throw new Error("Setting the contact card photo is only available on macOS Sonoma and newer!");
+        }
+
+        await Server().privateApi.cloud.setContactCardAvatar(path);
     }
 
     static async modifyActiveAlias(alias: string) {
