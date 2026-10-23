@@ -44,7 +44,8 @@ export class iCloudInterface {
         try {
             await Server().privateApi.cloud.setContactCardAvatar(readablePath);
         } finally {
-            fs.rmSync(path.dirname(readablePath), { recursive: true, force: true });
+            fs.unlinkSync(readablePath);
+            fs.rmdirSync(path.dirname(readablePath));
         }
     }
 
