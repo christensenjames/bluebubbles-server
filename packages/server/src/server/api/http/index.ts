@@ -190,7 +190,7 @@ export class HttpService extends Loggable {
                 this.log.info(`Client disconnected (Total Clients: ${this.socketServer.sockets.sockets.size})`);
             });
 
-            // A throw here once left an unauthenticated socket connected with no routes; fail closed instead.
+            // Fail closed: a throw must not leave an unauthenticated socket connected.
             try {
                 const pass = String(socket.handshake.query?.password ?? socket.handshake.query?.guid ?? "");
                 const cfgPass = safeTrim(String(Server().repo.getConfig("password") ?? ""));
@@ -203,7 +203,6 @@ export class HttpService extends Loggable {
                     // Not an escape sequence; the raw value is compared below.
                 }
 
-                // Basic authentication
                 if (cfgPass === "" || (safeTrim(pass) !== cfgPass && safeTrim(decodedPass) !== cfgPass)) {
                     socket.disconnect();
                     this.log.info(`Closing client connection. Authentication failed.`);
@@ -213,12 +212,6 @@ export class HttpService extends Loggable {
                     `Client Authenticated Successfully (Total Clients: ${this.socketServer.sockets.sockets.size})`
                 );
 
-                /**
-                 * Error handling middleware for all Socket.IO requests.
-                 * If there are any errors in a socket event, they will be handled here.
-                 *
-                 * A console message will be printed, and a socket error will be emitted
-                 */
                 socket.use(async (_: any, next: (error?: Error) => void) => {
                     try {
                         await next();
@@ -229,7 +222,6 @@ export class HttpService extends Loggable {
                     }
                 });
 
-                // Pass to method to handle the socket events
                 SocketRoutesV1.createRoutes(socket);
             } catch (ex: unknown) {
                 this.log.error(`Failed to set up socket client! ${ex instanceof Error ? ex.message : String(ex)}`);

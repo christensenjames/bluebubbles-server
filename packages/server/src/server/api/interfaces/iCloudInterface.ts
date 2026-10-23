@@ -2,7 +2,7 @@ import { Server } from "@server";
 import fs from "fs";
 import path from "path";
 import { FileSystem } from "@server/fileSystem";
-import { isMinBigSur, isMinHighSierra, isMinSonoma } from "@server/env";
+import { isMinBigSur, isMinHighSierra } from "@server/env";
 import { checkPrivateApiStatus, isNotEmpty } from "@server/helpers/utils";
 import { bytesToBase64 } from "byte-base64";
 
@@ -35,9 +35,6 @@ export class iCloudInterface {
 
     static async setContactCardAvatar(uploadPath: string) {
         checkPrivateApiStatus();
-        if (!isMinSonoma) {
-            throw new Error("Setting the contact card photo is only available on macOS Sonoma and newer!");
-        }
 
         // Messages is sandboxed and cannot read the upload's temp file
         const readablePath = FileSystem.copyAttachment(uploadPath, "contact-card-avatar", "private-api");

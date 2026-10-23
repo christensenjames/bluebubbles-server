@@ -2,7 +2,8 @@
 
 ## 2026-10-23 — Set the iMessage contact card photo
 
-- New `POST /api/v1/icloud/contact/avatar` (multipart field `avatar`, Private API, macOS 14+)
+- New `POST /api/v1/icloud/contact/avatar` (multipart field `avatar`, Private API; the helper
+  rejects macOS releases without the photo API, which arrived in 14)
   sets the photo on the user's iMessage contact card. The upload is copied into
   `~/Library/Messages/Attachments/BlueBubbles/` first, because sandboxed Messages cannot read
   the request's temp file, and the copy is deleted afterwards (`iCloudInterface.ts`, branch
