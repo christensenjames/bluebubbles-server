@@ -63,12 +63,14 @@ export class ContactInterface {
         return records.map((contact: NodeJS.Dict<any>) => {
             // Load the avatar based on the selected extra fields
             let avatar = null;
+            // node-mac-contacts sets contactImage to an empty buffer when only the thumbnail is stored locally
+            const image = isNotEmpty(contact?.contactImage) ? contact.contactImage : contact?.contactThumbnailImage;
             if (extraProps.includes("avatar")) {
-                avatar = contact?.avatar ?? contact?.contactImage ?? contact.contactImageThumbnail;
+                avatar = contact?.avatar ?? image;
             } else if (extraProps.includes("contactImage")) {
-                avatar = contact?.contactImage ?? contact.contactImageThumbnail;
-            } else if (extraProps.includes("contactImageThumbnail")) {
-                avatar = contact?.contactImageThumbnail;
+                avatar = image;
+            } else if (extraProps.includes("contactThumbnailImage")) {
+                avatar = contact?.contactThumbnailImage;
             }
 
             let displayName = contact?.displayName;
