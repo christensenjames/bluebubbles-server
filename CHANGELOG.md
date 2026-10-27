@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-27 — Fix packaged Firebase dependency resolution
+
+- Keep node-fetch 2 available to gaxios 6 in packaged builds, while bundling node-fetch 3
+  under an alias for the upstream gaxios 7 workaround.
+
 ## 2026-10-27 — Disable upstream update installs
 
 - Update checks remain available, but this fork no longer downloads or installs upstream releases,

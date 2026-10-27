@@ -1,7 +1,7 @@
 import fs from "fs";
 import Module from "module";
 import path from "path";
-import nodeFetch from "node-fetch";
+import nodeFetch from "node-fetch-v3";
 
 /**
  * gaxios 7 (used by firebase-admin 13 and googleapis 178) loads its HTTP client with
