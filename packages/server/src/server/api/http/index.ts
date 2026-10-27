@@ -3,7 +3,6 @@ import { Server as SocketServer, ServerOptions } from "socket.io";
 
 // HTTP libraries
 import KoaApp from "koa";
-import koaBody from "koa-body";
 import koaJson from "koa-json";
 import KoaRouter from "koa-router";
 import koaCors from "koa-cors";
@@ -13,7 +12,7 @@ import * as fs from "fs";
 
 // Internal libraries
 import { Server } from "@server";
-import { isNotEmpty, onlyAlphaNumeric, safeTrim } from "@server/helpers/utils";
+import { isNotEmpty, onlyAlphaNumeric } from "@server/helpers/utils";
 import { EventCache } from "@server/eventCache";
 import { CertificateService } from "@server/services/certificateService";
 
@@ -21,11 +20,19 @@ import { HttpRoutes as HttpRoutesV1 } from "./api/v1/httpRoutes";
 import { SocketRoutes as SocketRoutesV1 } from "./api/v1/socketRoutes";
 import { ErrorMiddleware } from "./api/v1/middleware/errorMiddleware";
 import { createServerErrorResponse } from "./api/v1/responses";
+import { checkServerPassword, getSocketPassword } from "./passwordAuth";
 import { HELLO_WORLD } from "@server/events";
 import { ScheduledService } from "../../lib/ScheduledService";
 import { Loggable } from "../../lib/logging/Loggable";
 import { ProxyServices } from "@server/databases/server/constants";
 import { ProcessSpawner } from "@server/lib/ProcessSpawner";
+import { AuthThrottle, resolveClientAddress } from "./authThrottle";
+
+const checkSocketPassword = (query: Record<string, unknown>) => {
+    const raw = query?.password ?? query?.guid;
+    const result = checkServerPassword(raw);
+    return result === "ok" ? result : checkServerPassword(getSocketPassword(query));
+};
 
 /**
  * This service class handles all routing for incoming socket
@@ -48,7 +55,36 @@ export class HttpService extends Loggable {
         // 100 MB. 1000 == 1kb. 1000 * 1000 == 1mb
         maxHttpBufferSize: 1000 * 1000 * 100,
         allowEIO3: true,
-        transports: ["websocket", "polling"]
+        transports: ["websocket", "polling"],
+
+        // Reject a new session before engine.io accepts any of its payloads (up to maxHttpBufferSize
+        // each), so an unauthenticated client can't make the server buffer data. engine.io only calls
+        // this for a session's first request, and passes the same query that becomes socket.handshake.query.
+        allowRequest: (req, callback) => {
+            let query = (req as any)._query as Record<string, unknown>;
+            if (!query) {
+                query = Object.fromEntries(new URL(req.url ?? "", "http://localhost").searchParams.entries());
+            }
+
+            // Refuse blocked clients before looking at the password, so a blocked
+            // client learns nothing about its guesses
+            const clientAddress = resolveClientAddress(req.socket.remoteAddress, req.headers["x-forwarded-for"]);
+            if (this.authThrottle.retryAt(clientAddress) > 0) {
+                this.log.debug(`Rejecting client connection from blocked address ${clientAddress}.`);
+                callback("Too many failed authentication attempts", false);
+                return;
+            }
+
+            const pass = getSocketPassword(query);
+            const result = checkSocketPassword(query);
+            const authorized = result === "ok";
+            if (!authorized) {
+                this.log.info(`Rejecting client connection (IP: ${clientAddress}). Authentication failed.`);
+                if (result === "invalid") this.recordAuthFailure(clientAddress, String(pass).trim());
+            }
+
+            callback(authorized ? null : "Authentication failed", authorized);
+        }
     };
 
     httpOpts: any;
@@ -59,8 +95,13 @@ export class HttpService extends Loggable {
 
     portCheckerService: ScheduledService;
 
+    authThrottle: AuthThrottle;
+
     initialize() {
         this.httpOpts = {};
+
+        // Re-created on every (re)initialize, so restarting the server clears all blocks
+        this.authThrottle = new AuthThrottle();
 
         // Configure certificates
         try {
@@ -112,23 +153,10 @@ export class HttpService extends Loggable {
         // This allows us to properly pull the IP from the request
         this.koaApp.proxy = true;
 
-        // This is used here so that we can catch errors in KoaBody as well
+        // Catch any errors that escape the route-level middleware
         this.koaApp.use(ErrorMiddleware);
 
-        // Increase size limits from the default 1mb
-        this.koaApp.use(
-            koaBody({
-                jsonLimit: "100mb",
-                textLimit: "100mb",
-                formLimit: "1024mb",
-                multipart: true,
-                parsedMethods: ["POST", "PUT", "PATCH", "DELETE"],
-                formidable: {
-                    // 1GB (1024 b * 1024 kb * 1024 mb)
-                    maxFileSize: 1024 * 1024 * 1024 // Defaults to 200mb
-                }
-            })
-        );
+        // Request bodies are parsed per-route, after authentication (see BodyMiddleware)
 
         // Don't show it "pretty" by default, but only if there is a `pretty` param
         this.koaApp.use(
@@ -147,18 +175,42 @@ export class HttpService extends Loggable {
     }
 
     /**
+     * Records a wrong password and raises a warning (which lands in the
+     * notification drawer) naming the address when it gets that client blocked.
+     */
+    recordAuthFailure(address: string | null, credential: string) {
+        const { blockAlert, globalAlert } = this.authThrottle.recordFailure(address, credential);
+        if (blockAlert) {
+            const until = new Date(blockAlert.retryAt).toLocaleString();
+            Server().log(
+                `Blocked client ${blockAlert.address} after ${blockAlert.failures} different incorrect passwords ` +
+                    `in the last ${blockAlert.rule.label}. Authentication from this address is refused until ${until}. ` +
+                    `If this is one of your own devices, restart the server to clear the block.`,
+                "warn"
+            );
+        }
+
+        if (globalAlert) {
+            Server().log(
+                `${globalAlert.failures} different incorrect passwords have been tried against the server in the ` +
+                    `last ${this.authThrottle.globalRuleLabel}. Someone may be trying to guess your password; ` +
+                    `consider changing it to a long, random one.`,
+                "warn"
+            );
+        }
+    }
+
+    /**
      * Checks to see if another process is listening on the socket port.
      */
     async checkIfPortInUse(port: number) {
         try {
             // Check if there are any listening services
+            // lsof exits non-zero (and we land in the catch) when nothing is listening
             const output = await ProcessSpawner.executeCommand('lsof', [
                 '-nP',
-                '-iTCP',
-                '-sTCP:LISTEN',
-                '|',
-                'grep',
-                `${port}`
+                `-iTCP:${Number(port)}`,
+                '-sTCP:LISTEN'
             ], {}, "PortChecker");
             if (output.includes(`:${port} (LISTEN)`)) return true;
         } catch {
@@ -190,42 +242,39 @@ export class HttpService extends Loggable {
                 this.log.info(`Client disconnected (Total Clients: ${this.socketServer.sockets.sockets.size})`);
             });
 
-            // Fail closed: a throw must not leave an unauthenticated socket connected.
             try {
-                const pass = String(socket.handshake.query?.password ?? socket.handshake.query?.guid ?? "");
-                const cfgPass = safeTrim(String(Server().repo.getConfig("password") ?? ""));
-
-                // socket.io already decodes the query; decodeURI stays for double-encoding clients and throws on '%'.
-                let decodedPass = pass;
-                try {
-                    decodedPass = decodeURI(pass);
-                } catch {
-                    // Not an escape sequence; the raw value is compared below.
-                }
-
-                if (cfgPass === "" || (safeTrim(pass) !== cfgPass && safeTrim(decodedPass) !== cfgPass)) {
-                    socket.disconnect();
+                if (checkSocketPassword(socket.handshake.query) !== "ok") {
                     this.log.info(`Closing client connection. Authentication failed.`);
+                    socket.disconnect(true);
                     return;
                 }
+
+                this.authThrottle.recordSuccess(
+                    resolveClientAddress(socket.handshake.address, socket.handshake.headers["x-forwarded-for"])
+                );
                 this.log.info(
                     `Client Authenticated Successfully (Total Clients: ${this.socketServer.sockets.sockets.size})`
                 );
 
-                socket.use(async (_: any, next: (error?: Error) => void) => {
-                    try {
-                        await next();
-                    } catch (ex: any) {
-                        this.log.error(`Socket server error! ${ex.message}`);
-                        socket.emit("exception", createServerErrorResponse(ex?.message ?? ex));
-                        next(ex);
-                    }
-                });
+                const registerHandler = socket.on.bind(socket);
+                socket.on = ((event: string, listener: (...args: any[]) => any) =>
+                    registerHandler(event, async (...args: any[]) => {
+                        try {
+                            await listener(...args);
+                        } catch (ex: any) {
+                            const message = ex?.message ?? String(ex);
+                            this.log.error(`Socket server error in "${event}"! ${message}`);
+                            const res = createServerErrorResponse(message);
+                            const ack = args[args.length - 1];
+                            if (typeof ack === "function") ack(res);
+                            else socket.emit("exception", res);
+                        }
+                    })) as any;
 
                 SocketRoutesV1.createRoutes(socket);
             } catch (ex: unknown) {
                 this.log.error(`Failed to set up socket client! ${ex instanceof Error ? ex.message : String(ex)}`);
-                socket.disconnect();
+                socket.disconnect(true);
             }
         });
 

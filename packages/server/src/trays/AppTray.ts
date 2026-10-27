@@ -1,8 +1,6 @@
-import { autoUpdater } from "electron-updater";
 import { Server } from "@server";
 import { FileSystem } from "@server/fileSystem";
 import { Tray } from ".";
-import { SERVER_UPDATE_DOWNLOADING } from "@server/events";
 import { Menu, nativeTheme, Tray as ElectronTray, app } from "electron";
 import { AppWindow } from "@windows/AppWindow";
 import path from "path";
@@ -65,26 +63,15 @@ export class AppTray extends Tray {
     buildMenu(): Menu {
         const headless = (Server().repo?.getConfig("headless") as boolean) ?? false;
         const noGpu = (Server().repo?.getConfig("disable_gpu") as boolean) ?? false;
-        let updateOpt: any = {
+        const updateOpt = {
             label: "Check for Updates",
-            type: "normal",
+            type: "normal" as const,
             click: async () => {
                 if (Server()) {
                     await Server().updater.checkForUpdate({ showNoUpdateDialog: true });
                 }
             }
         };
-
-        if (Server()?.updater?.hasUpdate ?? false) {
-            updateOpt = {
-                label: `Install Update (${Server().updater.updateInfo.tag_name})`,
-                type: "normal",
-                click: async () => {
-                    Server().emitMessage(SERVER_UPDATE_DOWNLOADING, null);
-                    await autoUpdater.downloadUpdate();
-                }
-            };
-        }
 
         return Menu.buildFromTemplate([
             {

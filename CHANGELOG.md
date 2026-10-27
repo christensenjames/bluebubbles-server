@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-27 — Disable upstream update installs
+
+- Update checks remain available, but this fork no longer downloads or installs upstream releases,
+  including when the saved auto-install setting is enabled. The install HTTP route and installation
+  controls were removed to prevent replacing the fork with an upstream build.
+
 ## 2026-10-23 — Set the iMessage contact card photo
 
 - New `POST /api/v1/icloud/contact/avatar` (multipart field `avatar`, Private API; the helper

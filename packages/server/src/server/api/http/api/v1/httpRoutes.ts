@@ -4,6 +4,7 @@ import { isNotEmpty } from "@server/helpers/utils";
 
 // Middleware
 import { AuthMiddleware } from "./middleware/authMiddleware";
+import { BodyMiddleware } from "./middleware/bodyMiddleware";
 
 // Routers
 import { ThemeRouter } from "./routers/themeRouter";
@@ -24,6 +25,7 @@ import { MacOsRouter } from "./routers/macosRouter";
 import { iCloudRouter } from "./routers/icloudRouter";
 import { FaceTimeRouter } from "./routers/facetimeRouter";
 import { PrivateApiMiddleware } from "./middleware/privateApiMiddleware";
+import { ChatGuidMiddleware } from "./middleware/chatGuidMiddleware";
 import { HttpDefinition, HttpMethod, HttpRoute, HttpRouteGroup, KoaMiddleware } from "../../types";
 import { SettingsValidator } from "./validators/settingsValidator";
 import { MessageValidator } from "./validators/messageValidator";
@@ -49,7 +51,8 @@ export class HttpRoutes {
     static defaultResponseTimeout = 5 * 60 * 1000; // 5 minutes
 
     private static get protected() {
-        return [...HttpRoutes.unprotected, AuthMiddleware];
+        // Bodies are only parsed once the client has authenticated
+        return [...HttpRoutes.unprotected, AuthMiddleware, BodyMiddleware];
     }
 
     private static get unprotected() {
@@ -169,13 +172,6 @@ export class HttpRoutes {
                         method: HttpMethod.GET,
                         path: "update/check",
                         controller: ServerRouter.checkForUpdate
-                    },
-                    {
-                        method: HttpMethod.POST,
-                        path: "update/install",
-                        controller: ServerRouter.installUpdate,
-                        // 30 minute timeout in the case that they want to wait for the install to complete
-                        responseTimeoutMs: 30 * 60 * 1000
                     },
                     {
                         method: HttpMethod.GET,
@@ -797,6 +793,8 @@ export class HttpRoutes {
             ...(route?.middleware ?? group.middleware ?? []),
             this.TimeoutMiddleware(reqTimeout, resTimeout),
             ...(route.validators ?? []),
+            // Only the chat routes use the `:guid` param for a chat GUID
+            ChatGuidMiddleware(group.prefix === "chat"),
             route.controller
         ];
     }

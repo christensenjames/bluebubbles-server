@@ -34,7 +34,7 @@ import {
 } from '@chakra-ui/react';
 import { FiHome, FiSettings, FiMenu, FiBell, FiGithub, FiMessageCircle, FiTrash } from 'react-icons/fi';
 import { FaDiscord, FaGoogle } from 'react-icons/fa';
-import { AiOutlineBug, AiOutlineHome, AiOutlineApi, AiOutlineHeart, AiOutlineDownload } from 'react-icons/ai';
+import { AiOutlineBug, AiOutlineHome, AiOutlineApi, AiOutlineHeart } from 'react-icons/ai';
 import { BsChevronDown, BsCheckAll, BsBook, BsPersonCircle, BsFillCalendarCheckFill, BsPhone } from 'react-icons/bs';
 import { MdOutlineAttachMoney, MdOutlineLightMode, MdOutlineDarkMode } from 'react-icons/md';
 import { IconType } from 'react-icons';
@@ -53,23 +53,9 @@ import { NotificationsTable } from '../../components/tables/NotificationsTable';
 import './styles.css';
 
 import { useAppSelector, useAppDispatch } from '../../hooks';
-import { installUpdate } from '../../utils/IpcUtils';
-import { showSuccessToast } from '../../utils/ToastUtils';
 import { readAll, clear as clearAlerts, NotificationItem } from '../../slices/NotificationsSlice';
 import { ScheduledMessagesLayout } from 'app/layouts/scheduledMessages/ScheduledMessagesLayout';
 
-
-const downloadAndInstallUpdate = async () => {
-    await installUpdate();
-    showSuccessToast({
-        id: 'update',
-        title: 'Update Downloading',
-        description: (
-            'Downloading & Installing update in the background. ' +
-            'The server will automatically restart when the update is complete.'
-        )
-    });
-};
 
 interface LinkItemProps {
     name: string;
@@ -249,8 +235,6 @@ interface MobileProps extends FlexProps {
 const MobileNav = ({ onOpen, onNotificationOpen, unreadCount, ...rest }: MobileProps) => {
     const { colorMode, toggleColorMode } = useColorMode();
     const useOled = useAppSelector(state => state.config.use_oled_dark_mode ?? false);
-    const updateAvailable: boolean = (useAppSelector(state => state.config.update_available?.show) ?? false);
-    const updateVersion: string = (useAppSelector(state => state.config.update_available?.version) ?? '');
     const bgColor = (colorMode === 'light') ? 'white' : (useOled ? 'black' : 'gray.800');
 
     return (
@@ -281,30 +265,6 @@ const MobileNav = ({ onOpen, onNotificationOpen, unreadCount, ...rest }: MobileP
             </Text>
 
             <HStack spacing={{ base: '0', md: '1' }}>
-                {(updateAvailable) ? (
-                    <Box position='relative' float='left'>
-                        <Tooltip label="Update Available" aria-label="update-tip">
-                            <IconButton
-                                size="lg"
-                                variant="ghost"
-                                aria-label="update"
-                                icon={<AiOutlineDownload />}
-                                onClick={downloadAndInstallUpdate}
-                            />
-                        </Tooltip>
-                        <Badge
-                            borderRadius='lg'
-                            variant='solid'
-                            colorScheme='green'
-                            position='absolute'
-                            margin={0}
-                            top={2}
-                            right={8}
-                            zIndex={2}
-                            fontSize={10}
-                        >v{updateVersion}</Badge>
-                    </Box>
-                ): null}
                 <Tooltip label="Website Home" aria-label="website-tip">
                     <Link href="https://bluebubbles.app" style={{ textDecoration: 'none' }} target="_blank">
                         <IconButton size="lg" variant="ghost" aria-label="website" icon={<AiOutlineHome />} />
